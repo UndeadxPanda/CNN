@@ -599,10 +599,7 @@ class Network(object):
             mini_batches = [training_data[k:k + mini_batch_size]
                             for k in range(0, n, mini_batch_size)]
 
-            i = 1
             for mini_batch in mini_batches:
-                print('mini_batch: ' + str(i))
-                i += 1
                 self.update_mini_batch(eta, mini_batch, n, L1, L2)
 
             evaluation_result = self.evaluate(test_data)
