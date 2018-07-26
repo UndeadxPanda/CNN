@@ -2,10 +2,14 @@ import numpy as np
 import random
 import pickle, json, sys
 
-"""
+""" 
 Contents:
     Activation Functions
         -Sigmoid
+        -ReLU
+        -PReLU
+        -ELU
+        -SoftMax
         -Identity
     Cost Functions
         -Cross Entropy
@@ -53,7 +57,7 @@ class Sigmoid(object):
 
 
 class ReLU(object):
-
+    # Rectified Linear Unit
     @staticmethod
     def f(z):
         return max(0, z)
@@ -70,7 +74,7 @@ class ReLU(object):
 
 
 class PReLU(object):
-
+    # Parametric ReLU
     def __init__(self, alpha=0.01):
         self.alpha = alpha
 
@@ -88,7 +92,7 @@ class PReLU(object):
 
 
 class ELU(object):
-
+    # Exponential Linear Unit
     def __init__(self, alpha=0.01):
         self.alpha = alpha
 
@@ -115,6 +119,7 @@ class SoftMax(object):
     def f_prime(z):
         return SoftMax.f(z) - SoftMax.f(z) ** 2
 
+
 class Identity(object):
 
     @staticmethod
@@ -129,14 +134,21 @@ class Identity(object):
 '''
 Begin: COST FUNCTIONS
     :def fn(a, y): cost function with output a, expected output y
-    :def delta(z, a, y): derivative of the cost function with
+    :def delta(z, a, y): derivative of the cost function with 
+                         respect to z (dCdz) given parameters
                          output a, expected output y, and input
-                         to final layer activation function z
+                         to final layer activation function z.
+    :def dCda(a, y): derivative of the cost function with respect
+                     to a, the output of the final layer
 '''
 
 
 class CrossEntropyCost(object):
-
+    """
+    Removes the sigmoid prime term from the gradient of the first layer
+    when used with the sigmoid activation function, thus increasing the
+    speed of learning
+    """
     @staticmethod
     def fn(a, y):
         return np.sum(np.nan_to_num(-y * np.log(a) - (1 - y) * np.log(1 - a)))
@@ -153,7 +165,7 @@ class CrossEntropyCost(object):
 
 
 class QuadraticCost(object):
-
+    # Also called the L2 cost function
     @staticmethod
     def fn(a, y):
         return np.linalg.norm(a - y) ** 2 / 2
@@ -187,11 +199,13 @@ Begin: LAYERS
 
 
 class InputLayer(object):
-    # Input layer has no 'connect_to' function as there
-    # is no previous layer to connect to. It also has
-    # no 'backward_pass' function for the same reason.
-    # As this layer has no modifiable parameters, the
-    # 'reweight' function has been removed as well
+    """
+    Input layer has no 'connect_to' function as there
+    is no previous layer to connect to. It also has
+    no 'backward_pass' function for the same reason.
+    As this layer has no modifiable parameters, the
+    'reweight' function has been removed as well
+    """
     def __init__(self, size):
         self.size = size
         self.a = None
@@ -202,7 +216,9 @@ class InputLayer(object):
 
 
 class FullyConnectedLayer(object):
-
+    """
+    Standard dense fully connected layer
+    """
     def __init__(self, size, activation_f=Sigmoid):
         self.activation_f = activation_f
         self.size = size
@@ -233,13 +249,28 @@ class FullyConnectedLayer(object):
 
 
 # ------------------------------------------------------------
-# IMAGE PROCESSING LAYERS -- **Untested**
+# IMAGE PROCESSING LAYERS
 # ------------------------------------------------------------
 
 
 def convolve(img, img_size, filter_in, filter_size, stride, padding='same'):
-    # l_img = img_size[0]
-    # w_img = img_size[1]
+    """
+    Basic convolution operation on an image img with filter filter_in
+    :param img: the image to be convolved, passed as a
+                vector of pixel values
+    :param img_size: tuple containing (length, width) of
+                     the image
+    :param filter_in: the filter used in the convolution
+                      passed as a vector of weights
+    :param filter_size: tuple containing (length, width)
+                        of the filter
+    :param stride: the step size of the filter
+    :param padding: used to determine a tuple (l_pad,
+                    w_pad) used to pad the edges of the
+                    image with 0-pixels in order to fix
+                    the size of the output convolution
+    :return: the convolution of img with filter_in
+    """
     convolution = []
     if padding == 'same':
         padding = filter_size
@@ -255,6 +286,7 @@ def convolve(img, img_size, filter_in, filter_size, stride, padding='same'):
             img_block = []
             for k1 in range(int(-filter_size[0]/2), int((filter_size[0] + 1)/2)):
                 for k2 in range(int(-filter_size[1]/2), int((filter_size[1] + 1)/2)):
+                    # if out of bounds, pad with 0-pixels
                     if i + k1 < 0 or i + k1 >= img_size[0] or j + k2 < 0 or j + k2 >= img_size[1]:
                         img_block.append(0)
                     else:
@@ -282,6 +314,10 @@ class ConvolutionLayer(object):
         :param stride: number of pixels the filter moves
                        when creating the feature map
                        mathematically, stride = t
+        :param padding: the type of padding to be used in
+                        the convolutions - 'same' or 'none'
+        :param activation_f: the activation function to be
+                             applied to the convolution
         """
         self.depth = depth
         self.img_size = img_size
@@ -298,7 +334,9 @@ class ConvolutionLayer(object):
         self.size = (int((img_size[0] - filter_size[0])/stride) + 1) * (
                      int((img_size[1] - filter_size[1])/stride) + 1) * depth
 
-        self.biases = np.random.randn(1, 1)
+        # one bias for each filter
+        self.biases = np.random.randn(depth, 1)
+        # one set of weights for each filter
         self.weights = [np.random.randn(filter_size[0] * filter_size[1], 1) /
                         np.sqrt(filter_size[0] * filter_size[1]) for i in range(depth)]
 
@@ -311,6 +349,8 @@ class ConvolutionLayer(object):
         img_out = []
         for filtr in range(self.depth):
             first = True
+
+            # convolve over all input images and output the sum
             for i in range(0, len(a), self.img_size[0] * self.img_size[1]):
                 convolution_i, conv_size = convolve(a[i:i + self.img_size[0] * self.img_size[1]], self.img_size,
                                                     self.weights[filtr], self.filter_size, self.stride,
@@ -328,8 +368,15 @@ class ConvolutionLayer(object):
         return self.a
 
     def backward_pass(self, dCdz):
+        """
+        The following link explains CNN backpropagation in more depth.
+        https://medium.com/@2017csm1006/forward-and-backpropagation-in-convolutional-neural-network-4dfa96d7b37e
+        """
         dCdb = dCdz * self.activation_f.f_prime(self.z)
 
+        # dCdW can be computed by convolving the input image with dCdz such that
+        # we are essentially doing an inverse convolution to get the gradients
+        # with respect to the filter
         dCdW = []
         if self.padding == 'same':
             padding = (self.filter_size[0] - 1, self.filter_size[1] - 1)
@@ -344,6 +391,7 @@ class ConvolutionLayer(object):
                 convolution += convolution_i
             dCdW.append(convolution)
 
+        # dCd(z-1) can be computed by a full convolution of dCdz with the filter used
         dz1 = []
         for filtr in range(self.depth):
             first = True
@@ -392,6 +440,11 @@ class PoolingLayer(object):
         self.a0 = a
         pool = []
         if self.pool_type == 'max':
+            '''
+            The code here is pretty much the same as in convolve,
+            but instead of taking a dot product, we are taking
+            max(img_block)
+            '''
             for image in range(0, len(a), self.img_size[0] * self.img_size[1]):
                 img = a[image:image + self.img_size[0] * self.img_size[1]]
                 for i in range(int((self.pool_size[0])/2),
@@ -458,6 +511,31 @@ class PoolingLayer(object):
 
 '''
 Begin: NEURAL NETWORK CLASS
+    :add_layer(layer) : adds a layer to the network and
+                        connects it to the previous layer
+                        of the network
+    :feed_forward(a) : computes the output activation of
+                       the network given an input 'a'
+    :back_propagation(x, y) : calls feed_forward on 'x'
+                              and computes the gradients
+                              to the cost function given
+                              expected output 'y' which
+                              are used to update the 
+                              parameters in the network 
+                              on the backward pass
+    :SGD(training_data, epochs, mini_batch_size, eta, 
+         test_data=None, L1=0.0, L2=0.0, 
+         early_stopping=False, variable_eta=False) :
+            performs stochastic gradient descent on the
+            network with learning rate 'eta' given the 
+            'training_data' over the number of 'epochs' 
+            using a batch size of 'mini_batch_size'.
+            L1 and L2 regularization parameters are
+            provided as well and support for early
+            stopping and a gradual decrease of the 
+            learning rate has also been implemented.
+    :update_mini_batch(eta, mini_batch, n, L1, L2) :
+            helper function for SGD
 '''
 
 
@@ -486,8 +564,10 @@ class Network(object):
         dCdW = []
         dCdb = []
 
-        # janky, see if we can make this more universal
-        # try an implementation with cost_f.dCda(a, y)
+        # NOTE -
+        # The following code is janky - it forces us to precompute
+        # the gradients to the first backward pass. It can be made more
+        # universal by using an implementation with cost_f.dCda(a, y)
         z = self.layers[-1].z
         a = self.layers[-1].a
         delta = self.cost_f.delta(z, a, y)
